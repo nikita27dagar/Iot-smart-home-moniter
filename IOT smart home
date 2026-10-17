@@ -1,0 +1,120 @@
+import random
+from datetime import datetime, timedelta
+
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="IoT Smart Home Monitor", page_icon="🏠", layout="wide")
+
+st.title("🏠 IoT Smart Home Monitor")
+st.write("A beginner-friendly dashboard to monitor home temperature, humidity, air quality, and device status.")
+st.caption("Demo mode: readings are simulated. Connect real sensors or an IoT API to use live data.")
+
+with st.sidebar:
+    st.header("Dashboard Settings")
+    mode = st.radio("Data source", ["Demo data", "Manual sensor values"])
+    st.markdown("---")
+    st.subheader("Alert thresholds")
+    temp_limit = st.slider("High temperature alert (°C)", 20, 45, 32)
+    humidity_limit = st.slider("High humidity alert (%)", 40, 100, 70)
+    air_limit = st.slider("Air quality alert (AQI)", 50, 300, 150)
+
+if mode == "Manual sensor values":
+    st.subheader("Enter sensor readings")
+    c1, c2, c3 = st.columns(3)
+    temperature = c1.number_input("Temperature (°C)", min_value=-10.0, max_value=80.0, value=26.0, step=0.5)
+    humidity = c2.number_input("Humidity (%)", min_value=0.0, max_value=100.0, value=55.0, step=1.0)
+    aqi = c3.number_input("Air Quality Index (AQI)", min_value=0, max_value=500, value=45, step=5)
+else:
+    # Stable demo values for a readable dashboard; click refresh to simulate new sensor readings.
+    if "sensor_readings" not in st.session_state:
+        st.session_state.sensor_readings = {
+            "temperature": round(random.uniform(23, 31), 1),
+            "humidity": round(random.uniform(40, 65), 1),
+            "aqi": random.randint(20, 100),
+        }
+    readings = st.session_state.sensor_readings
+    temperature, humidity, aqi = readings["temperature"], readings["humidity"], readings["aqi"]
+    if st.button("🔄 Refresh demo readings"):
+        st.session_state.sensor_readings = {
+            "temperature": round(random.uniform(23, 38), 1),
+            "humidity": round(random.uniform(35, 85), 1),
+            "aqi": random.randint(15, 220),
+        }
+        st.rerun()
+
+st.subheader("Current Sensor Readings")
+m1, m2, m3 = st.columns(3)
+m1.metric("🌡️ Temperature", f"{temperature:.1f} °C", help="Simulated or manually entered reading")
+m2.metric("💧 Humidity", f"{humidity:.0f} %")
+m3.metric("🌫️ Air Quality (AQI)", f"{aqi}")
+
+alerts = []
+if temperature >= temp_limit:
+    alerts.append(f"High temperature: {temperature:.1f} °C (threshold {temp_limit} °C)")
+if humidity >= humidity_limit:
+    alerts.append(f"High humidity: {humidity:.0f}% (threshold {humidity_limit}%)")
+if aqi >= air_limit:
+    alerts.append(f"Air quality alert: AQI {aqi} (threshold {air_limit})")
+
+st.subheader("Alerts")
+if alerts:
+    for alert in alerts:
+        st.warning("⚠️ " + alert)
+else:
+    st.success("✅ All readings are below the configured alert thresholds.")
+
+st.subheader("Home Device Status")
+d1, d2, d3 = st.columns(3)
+light_on = d1.toggle("Living room light", value=True)
+fan_on = d2.toggle("Bedroom fan", value=False)
+security_on = d3.toggle("Security monitoring", value=True)
+
+device_status = pd.DataFrame([
+    {"Device": "Living room light", "Status": "ON" if light_on else "OFF"},
+    {"Device": "Bedroom fan", "Status": "ON" if fan_on else "OFF"},
+    {"Device": "Security monitoring", "Status": "ON" if security_on else "OFF"},
+])
+st.dataframe(device_status, use_container_width=True, hide_index=True)
+st.caption("These controls update the demo dashboard only; they do not control physical devices.")
+
+st.subheader("Recent Sensor History")
+if "history" not in st.session_state:
+    now = datetime.now()
+    st.session_state.history = [
+        {
+            "Time": (now - timedelta(minutes=5 * i)).strftime("%H:%M"),
+            "Temperature (°C)": round(random.uniform(23, 30), 1),
+            "Humidity (%)": round(random.uniform(40, 65), 1),
+            "AQI": random.randint(20, 100),
+        }
+        for i in reversed(range(8))
+    ]
+
+history = pd.DataFrame(st.session_state.history)
+st.line_chart(history.set_index("Time")[["Temperature (°C)", "Humidity (%)"]])
+st.bar_chart(history.set_index("Time")[["AQI"]])
+
+if st.button("Add current readings to history"):
+    st.session_state.history.append({
+        "Time": datetime.now().strftime("%H:%M:%S"),
+        "Temperature (°C)": float(temperature),
+        "Humidity (%)": float(humidity),
+        "AQI": int(aqi),
+    })
+    st.session_state.history = st.session_state.history[-20:]
+    st.rerun()
+
+st.markdown("---")
+st.markdown("### Project architecture")
+st.code(
+    "Temperature / Humidity / Air Sensor\\n"
+    "          ↓\\n"
+    "     ESP32 / Arduino (optional)\\n"
+    "          ↓ Wi-Fi / MQTT / HTTP API\\n"
+    "     Python data service\\n"
+    "          ↓\\n"
+    "     Streamlit dashboard",
+    language="text",
+)
+st.info("For real hardware, connect an ESP32 and sensors, then replace the demo/manual input section with data from your chosen MQTT broker or API.")
